@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: host-telemetry-aggregator
+  datasource:
+    # Overridden by SPRING_DATASOURCE_* in docker-compose.yml.
+    # reWriteBatchedInserts lets the JDBC driver turn batched INSERTs into multi-row INSERTs.
+    url: jdbc:postgresql://localhost:5432/telemetry?reWriteBatchedInserts=true
+    username: telemetry
+    password: telemetry
+  mvc:
+    apiversion:
+      use:
+        # The API version is the second path segment (/api/v1/...); a controller method declares the
+        # version it serves, and a version that no method serves is answered with 400.
+        path-segment: 1
+
+server:
+  tomcat:
+    # Default is 8192; every device holds one WebSocket connection.
+    max-connections: 20000
+
+telemetry:
+  ingest:
+    # Ingest pipeline tuning; the load test overrides these via TELEMETRY_INGEST_*.
+    # Bounded queue between the WebSocket handler and the writer (~10 s of traffic at 10k devices).
+    queue-capacity: 10000
+    # The writer flushes after batch-size messages (6 rows each) or flush-interval, whichever is first.
+    batch-size: 1000
+    flush-interval: 500ms
+    # Transient DB errors retry the same batch with exponential backoff between these bounds.
+    retry-initial-backoff: 100ms
+    retry-max-backoff: 5s
+    # How long shutdown waits for the writer to drain the queue.
+    shutdown-timeout: 10s
+    # A WebSocket that receives nothing for this long is closed: a device that went silent or a
+    # half-open TCP connection would otherwise hold its session memory forever. 90 s = 9 missed
+    # messages at the 10 s interval; a live device that reconnects loses nothing.
+    session-idle-timeout: 90s
+    # Rejected messages and discarded stats entries are summed in memory per device and reason and
+    # written to the ingest_rejections table once per interval. A misconfigured fleet then costs one
+    # row per device and reason per interval, not one row per message.
+    rejection-flush-interval: 60s
+    # The most (device, reason) pairs one interval keeps in memory, each with a message sample of up
+    # to 1 000 characters. Further pairs are only counted, in telemetry.rejections.unrecorded.
+    # 10 000 = every device of the target fleet failing for one reason.
+    rejection-max-entries: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics

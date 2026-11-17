@@ -1,0 +1,5 @@
+# gradlew runs inside the Linux build image; CRLF line endings would break it.
+gradlew text eol=lf
+*.sh    text eol=lf
+*.bat   text eol=crlf
+*.jar   binary

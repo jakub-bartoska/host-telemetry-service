@@ -1,0 +1,10 @@
+# Override used by run.sh on top of ../docker-compose.yml (Compose v2.12 compatible).
+# Host ports come from APP_PORT / DB_PORT in the base file; run.sh defaults them to 18080 / 15432.
+# The ingest tuning knobs are passed through as TELEMETRY_INGEST_*; the defaults here repeat the ones in
+# service/src/main/resources/application.yml, so keep them in sync.
+services:
+  app:
+    environment:
+      TELEMETRY_INGEST_QUEUE_CAPACITY: ${QUEUE_CAPACITY:-10000}
+      TELEMETRY_INGEST_BATCH_SIZE: ${BATCH_SIZE:-1000}
+      TELEMETRY_INGEST_FLUSH_INTERVAL: ${FLUSH_INTERVAL:-500ms}

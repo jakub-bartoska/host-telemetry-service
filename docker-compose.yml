@@ -1,0 +1,56 @@
+# Compose v2.12 compatible (no `include`, no `develop`).
+# Start:          docker compose up --build
+# With simulator: docker compose --profile sim up --build
+#                 (SIM_DEVICES=1000 docker compose --profile sim up --build for more devices)
+# Backfill:       docker compose --profile sim run simulator --mode backfill --devices 100 --days 1
+
+services:
+  db:
+    # Pinned; keep in sync with TimescaleContainerConfig in the service tests.
+    image: timescale/timescaledb:2.31.0-pg18
+    environment:
+      POSTGRES_DB: telemetry
+      POSTGRES_USER: telemetry
+      POSTGRES_PASSWORD: telemetry
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      # PostgreSQL 18 images keep PGDATA in a versioned subdirectory (/var/lib/postgresql/18/docker).
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telemetry -d telemetry"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      target: app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/telemetry?reWriteBatchedInserts=true
+      SPRING_DATASOURCE_USERNAME: telemetry
+      SPRING_DATASOURCE_PASSWORD: telemetry
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+  simulator:
+    build:
+      context: .
+      target: simulator
+    profiles: ["sim"]
+    # No healthcheck on `app`: the simulator itself retries the first connection for up to 60 s.
+    depends_on:
+      - app
+    # Defaults for the simulator's flags (SIM_<FLAG>); flags given to `run simulator …` override them.
+    environment:
+      SIM_URL: ws://app:8080/ws/telemetry
+      SIM_MODE: ${SIM_MODE:-live}
+      SIM_DEVICES: ${SIM_DEVICES:-100}
+      SIM_INTERVAL: ${SIM_INTERVAL:-10s}
+
+volumes:
+  db-data:
